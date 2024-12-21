@@ -8,6 +8,7 @@ class AudioManager: NSObject, ObservableObject, AVAudioRecorderDelegate, AVAudio
     @Published var isPlaying = false
     @Published var currentTime: TimeInterval = 0
     @Published var currentRecordingURL: URL?
+    @Published var currentPlayingURL: URL?
     
     private var audioRecorder: AVAudioRecorder?
     private var audioPlayer: AVAudioPlayer?
@@ -179,6 +180,24 @@ class AudioManager: NSObject, ObservableObject, AVAudioRecorderDelegate, AVAudio
             self.currentRecordingURL = nil
         }
         print("✅ 录音播放完成")
+    }
+    
+    // 添加本地音频播放方法
+    func playLocalAudio(url: URL) {
+        print("🎵 开始播放本地音频: \(url)")
+        stopAllAudio()
+        
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            audioPlayer = try AVAudioPlayer(contentsOf: url)
+            audioPlayer?.delegate = self
+            audioPlayer?.play()
+            isPlaying = true
+            currentPlayingURL = url
+            print("✅ 开始播放本地音频")
+        } catch {
+            print("❌ 播放本地音频失败: \(error)")
+        }
     }
     
     deinit {

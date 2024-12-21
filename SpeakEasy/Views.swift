@@ -405,74 +405,7 @@ struct PracticeItemRow: View {
         }
     }
 }
-
-//xxxx  修改 PracticeItemRow 结构体
-//struct PracticeItemRow: View {
-//    let item: PracticeItem
-//    @StateObject private var dbManager = DatabaseManager.shared
-//    @State private var highestScore: Int = 0
-//    @State private var practiceCount: Int = 0
-//    
-//    var body: some View {
-//        VStack(alignment: .leading, spacing: 8) {
-//            HStack {
-//                Text(item.title)
-//                    .font(.headline)
-//                    .foregroundColor(practiceCount == 0 ? .red : .primary)  // 未练习显示红色
-//                
-//                if practiceCount == 0 {
-//                    Text("NEW")
-//                        .font(.caption)
-//                        .fontWeight(.bold)
-//                        .foregroundColor(.white)
-//                        .padding(.horizontal, 6)
-//                        .padding(.vertical, 2)
-//                        .background(Color.red)
-//                        .cornerRadius(4)
-//                } else {
-//                    Image(systemName: "checkmark.circle.fill")
-//                        .foregroundColor(.green)
-//                }
-//                
-//                Spacer()
-//            }
-//            
-//            HStack {
-//                if highestScore > 0 {
-//                    Text("最高分: \(highestScore)")
-//                        .font(.caption)
-//                        .foregroundColor(.green)
-//                } else {
-//                    Text("未练习")
-//                        .font(.caption)
-//                        .foregroundColor(.red)  // 未练习状态也显示为红色
-//                }
-//                
-//                Spacer()
-//                
-//                HStack(spacing: 4) {
-//                    Image(systemName: "mic.fill")
-//                    Text("\(practiceCount)次")
-//                }
-//                .font(.caption)
-//                .padding(4)
-//                .background(Color.blue.opacity(0.2))
-//                .cornerRadius(4)
-//            }
-//        }
-//        .onAppear {
-//            loadStats()
-//        }
-//    }
-//    
-//    private func loadStats() {
-//        if let id = item.id {
-//            let stats = dbManager.loadPracticeStats(for: id)
-//            self.practiceCount = stats.practiceCount
-//            self.highestScore = stats.highestScore
-//        }
-//    }
-//}
+ 
 
 // 添加 ArticleView
 struct ArticleView: View {
@@ -513,7 +446,7 @@ struct ArticleView: View {
     }
 }
 
-// 添加 RecordingsView
+// 修改 RecordingsView
 struct RecordingsView: View {
     @StateObject private var audioManager = AudioManager.shared
     @StateObject private var dbManager = DatabaseManager.shared
@@ -523,15 +456,26 @@ struct RecordingsView: View {
         List {
             ForEach(recordings) { recording in
                 RecordingRow(recording: recording)
-            }
-            .onDelete { indexSet in
-                for index in indexSet {
-                    dbManager.deleteRecording(recordings[index])
-                }
+                    .contextMenu {  // 使用长按菜单替代滑动删除
+                        Button(role: .destructive) {
+                            // 删除录音文件
+                            let fileURL = recording.fileURL
+                            try? FileManager.default.removeItem(at: fileURL)
+                            
+                            // 删除数据库记录
+                            dbManager.deleteRecording(recording)
+                            
+                            // 重新加载录音列表
+                            dbManager.loadRecordings(for: recording.practiceItemId)
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    }
             }
         }
     }
 }
+
 
 // 添加 RecordButton
 struct RecordButton: View {

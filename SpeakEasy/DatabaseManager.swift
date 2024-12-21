@@ -381,44 +381,42 @@ class DatabaseManager: ObservableObject {
     }
     
     func deleteRecording(_ recording: Recording) {
-        print("🗑️ 开始删除录音: \(recording.id)")
-        guard let db = db else {
-            print("❌ 数据库连接不可用")
-            return
-        }
-        
         // 开始事务
         sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
         
-        // 1. 删除文件
-        do {
-            try FileManager.default.removeItem(at: recording.fileURL)
-            print("✅ 录音文件删除成功")
-        } catch {
-            print(" 删除录音文件失败: \(error)")
-            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
-            return
-        }
+        // 删除评分记录
+        let deleteScoreQuery = """
+        DELETE FROM speech_scores 
+        WHERE recording_id = ?;
+        """
         
-        // 2. 删除数据库记录
-        let query = "DELETE FROM recordings WHERE id = ?;"
         var statement: OpaquePointer?
-        
-        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+        if sqlite3_prepare_v2(db, deleteScoreQuery, -1, &statement, nil) == SQLITE_OK {
             sqlite3_bind_text(statement, 1, (recording.id.uuidString as NSString).utf8String, -1, nil)
             
             if sqlite3_step(statement) != SQLITE_DONE {
-                print("❌ 删除数据库记录失败")
-                sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
-            } else {
-                print("✅ 数据库记录删除成功")
-                sqlite3_exec(db, "COMMIT", nil, nil, nil)
+                print("Error deleting score")
             }
         }
         sqlite3_finalize(statement)
         
-        // 重新加载录音列表
-        loadRecordings(for: recording.practiceItemId)
+        // 删除录音记录
+        let deleteRecordingQuery = """
+        DELETE FROM recordings 
+        WHERE id = ?;
+        """
+        
+        if sqlite3_prepare_v2(db, deleteRecordingQuery, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, (recording.id.uuidString as NSString).utf8String, -1, nil)
+            
+            if sqlite3_step(statement) != SQLITE_DONE {
+                print("Error deleting recording")
+            }
+        }
+        sqlite3_finalize(statement)
+        
+        // 提交事务
+        sqlite3_exec(db, "COMMIT", nil, nil, nil)
     }
     
     func createScoresTable() {
