@@ -387,7 +387,7 @@ class DatabaseManager: ObservableObject {
             return
         }
         
-        // 开始事务
+        // 开���事务
         sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
         
         // 1. 删除文件
@@ -767,6 +767,330 @@ class DatabaseManager: ObservableObject {
         }
         
         sqlite3_finalize(statement)
+    }
+    
+    func loadTodayPracticeItem() -> PracticeItem? {
+        let query = """
+        SELECT p.*, COUNT(r.id) as recording_count
+        FROM practice_items p
+        LEFT JOIN recordings r ON p.id = r.practice_item_id
+        WHERE DATE(r.date) = DATE('now', 'localtime')
+        GROUP BY p.id
+        ORDER BY r.date DESC
+        LIMIT 1;
+        """
+        
+        var statement: OpaquePointer?
+        var item: PracticeItem?
+        
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            if sqlite3_step(statement) == SQLITE_ROW,
+               let stmt = statement {  // 解包 statement
+                item = extractPracticeItem(from: stmt)
+            }
+        }
+        sqlite3_finalize(statement)
+        
+        return item
+    }
+    
+    func generateDailyPracticeItem() -> PracticeItem? {
+        let query = """
+        SELECT p.*, COUNT(r.id) as recording_count
+        FROM practice_items p
+        LEFT JOIN recordings r ON p.id = r.practice_item_id
+        WHERE p.id NOT IN (
+            SELECT practice_item_id
+            FROM recordings
+            WHERE DATE(date) = DATE('now', 'localtime')
+        )
+        GROUP BY p.id
+        ORDER BY RANDOM()
+        LIMIT 1;
+        """
+        
+        var statement: OpaquePointer?
+        var item: PracticeItem?
+        
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            if sqlite3_step(statement) == SQLITE_ROW,
+               let stmt = statement {  // 解包 statement
+                item = extractPracticeItem(from: stmt)
+            }
+        }
+        sqlite3_finalize(statement)
+        
+        return item
+    }
+    
+    func loadPracticeHistory() -> [DailyPractices] {
+        let query = """
+        SELECT DISTINCT p.*, 
+               COUNT(r.id) as recording_count, 
+               MAX(r.date) as latest_date,
+               DATE(r.date) as practice_date
+        FROM practice_items p
+        INNER JOIN recordings r ON p.id = r.practice_item_id
+        GROUP BY p.id, DATE(r.date)
+        ORDER BY practice_date DESC, latest_date DESC;
+        """
+        
+        var statement: OpaquePointer?
+        var practicesByDate: [String: (Date, [PracticeItem])] = [:]
+        
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            while sqlite3_step(statement) == SQLITE_ROW,
+                  let stmt = statement {
+                if let item = extractPracticeItem(from: stmt),
+                   let dateText = sqlite3_column_text(stmt, 11) {
+                    let dateString = String(cString: dateText)
+                    
+                    // 转换日期
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateFormat = "yyyy-MM-dd"
+                    let date = dateFormatter.date(from: dateString) ?? Date()
+                    
+                    // 按日期分组
+                    if var existing = practicesByDate[dateString] {
+                        existing.1.append(item)
+                        practicesByDate[dateString] = existing
+                    } else {
+                        practicesByDate[dateString] = (date, [item])
+                    }
+                }
+            }
+        }
+        sqlite3_finalize(statement)
+        
+        // 转换为数组并排序
+        return practicesByDate.map { dateString, value in
+            DailyPractices(id: dateString, date: value.0, items: value.1)
+        }.sorted { $0.date > $1.date }
+    }
+    
+    private func extractPracticeItem(from statement: OpaquePointer) -> PracticeItem? {
+        let id = Int(sqlite3_column_int(statement, 0))
+        let title = String(cString: sqlite3_column_text(statement, 1))
+        let content = String(cString: sqlite3_column_text(statement, 2))
+        let isRead = sqlite3_column_int(statement, 3) != 0
+        let difficulty = Int(sqlite3_column_int(statement, 4))
+        let category = String(cString: sqlite3_column_text(statement, 5))
+        let mp3Url = String(cString: sqlite3_column_text(statement, 6))
+        let topicId = Int(sqlite3_column_int(statement, 7))
+        
+        return PracticeItem(
+            id: id,
+            title: title,
+            content: content,
+            isRead: isRead,
+            difficulty: difficulty,
+            category: category,
+            mp3Url: mp3Url,
+            topicId: topicId
+        )
+    }
+    
+    func generateHistoryPractices() {
+        // 检查是否已经有历史记录
+        let checkQuery = """
+        SELECT COUNT(*) FROM recordings 
+        WHERE date >= date('now', '-7 days');
+        """
+        
+        var statement: OpaquePointer?
+        var hasHistory = false
+        
+        if sqlite3_prepare_v2(db, checkQuery, -1, &statement, nil) == SQLITE_OK {
+            if sqlite3_step(statement) == SQLITE_ROW {
+                hasHistory = sqlite3_column_int(statement, 0) > 0
+            }
+        }
+        sqlite3_finalize(statement)
+        
+        // 如果已经有历史记录，就不再生成
+        if hasHistory {
+            return
+        }
+        
+        // 开始事务
+        sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
+        
+        // 为过去7天每天随机生成1-3条练习记录
+        for daysAgo in 1...7 {
+            let recordCount = Int.random(in: 1...3)
+            for _ in 0..<recordCount {
+                if let item = generateRandomPracticeItem() {
+                    // 生成过去的日期
+                    let date = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date()) ?? Date()
+                    
+                    // 创建录音文件
+                    let recordingId = UUID()
+                    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    let recordingsFolder = documentsPath.appendingPathComponent("Recordings", isDirectory: true)
+                    let fileURL = recordingsFolder.appendingPathComponent("\(recordingId.uuidString).m4a")
+                    
+                    // 创建空的录音文件
+                    try? "".write(to: fileURL, atomically: true, encoding: .utf8)
+                    
+                    // 插入录音记录
+                    let query = """
+                    INSERT INTO recordings (id, practice_item_id, date, duration, file_url)
+                    VALUES (?, ?, ?, ?, ?);
+                    """
+                    
+                    if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+                        sqlite3_bind_text(statement, 1, (recordingId.uuidString as NSString).utf8String, -1, nil)
+                        sqlite3_bind_int(statement, 2, Int32(item.id ?? 0))
+                        
+                        let dateFormatter = ISO8601DateFormatter()
+                        let dateString = dateFormatter.string(from: date)
+                        sqlite3_bind_text(statement, 3, (dateString as NSString).utf8String, -1, nil)
+                        
+                        let duration = Double.random(in: 30...120)
+                        sqlite3_bind_double(statement, 4, duration)
+                        sqlite3_bind_text(statement, 5, (fileURL.path as NSString).utf8String, -1, nil)
+                        
+                        if sqlite3_step(statement) != SQLITE_DONE {
+                            print("Error inserting recording")
+                        }
+                    }
+                    sqlite3_finalize(statement)
+                    
+                    // 随机生成评分记录
+                    let scoreQuery = """
+                    INSERT INTO speech_scores (recording_id, transcribed_text, match_score)
+                    VALUES (?, ?, ?);
+                    """
+                    
+                    if sqlite3_prepare_v2(db, scoreQuery, -1, &statement, nil) == SQLITE_OK {
+                        sqlite3_bind_text(statement, 1, (recordingId.uuidString as NSString).utf8String, -1, nil)
+                        sqlite3_bind_text(statement, 2, (item.content as NSString).utf8String, -1, nil)
+                        
+                        let score = Double.random(in: 0.6...1.0)
+                        sqlite3_bind_double(statement, 3, score)
+                        
+                        if sqlite3_step(statement) != SQLITE_DONE {
+                            print("Error inserting score")
+                        }
+                    }
+                    sqlite3_finalize(statement)
+                }
+            }
+        }
+        
+        // 提交事务
+        sqlite3_exec(db, "COMMIT", nil, nil, nil)
+    }
+    
+    private func generateRandomPracticeItem() -> PracticeItem? {
+        let query = """
+        SELECT p.*, COUNT(r.id) as recording_count
+        FROM practice_items p
+        LEFT JOIN recordings r ON p.id = r.practice_item_id
+        GROUP BY p.id
+        ORDER BY RANDOM()
+        LIMIT 1;
+        """
+        
+        var statement: OpaquePointer?
+        var item: PracticeItem?
+        
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            if sqlite3_step(statement) == SQLITE_ROW,
+               let stmt = statement {
+                item = extractPracticeItem(from: stmt)
+            }
+        }
+        sqlite3_finalize(statement)
+        
+        return item
+    }
+    
+    func loadContributions(months: Int = 8) -> [[PracticeContribution?]] {
+        let query = """
+        WITH RECURSIVE dates(date) AS (
+            SELECT date('now', 'start of day', '-\(months) months')
+            UNION ALL
+            SELECT date(date, '+1 day')
+            FROM dates
+            WHERE date < date('now', 'start of day')
+        )
+        SELECT 
+            dates.date,
+            MAX(s.match_score * 100) as max_score,
+            COUNT(r.id) as practice_count
+        FROM dates
+        LEFT JOIN recordings r ON date(r.date) = dates.date
+        LEFT JOIN speech_scores s ON r.id = s.recording_id
+        GROUP BY dates.date
+        ORDER BY dates.date;
+        """
+        
+        var statement: OpaquePointer?
+        var contributions: [PracticeContribution] = []
+        
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            while sqlite3_step(statement) == SQLITE_ROW {
+                let dateString = String(cString: sqlite3_column_text(statement, 0))
+                let score = Int(sqlite3_column_double(statement, 1))
+                let count = Int(sqlite3_column_int(statement, 2))
+                
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd"
+                if let date = dateFormatter.date(from: dateString) {
+                    contributions.append(PracticeContribution(
+                        id: dateString,
+                        date: date,
+                        score: score,
+                        count: count
+                    ))
+                }
+            }
+        }
+        sqlite3_finalize(statement)
+        
+        // 按周分组
+        var weeks: [[PracticeContribution?]] = []
+        var currentWeek: [PracticeContribution?] = Array(repeating: nil, count: 7)
+        var currentWeekDay = 0
+        
+        for contribution in contributions {
+            let weekday = Calendar.current.component(.weekday, from: contribution.date)
+            // 转换为周一开始的索引 (1 = Monday, 7 = Sunday)
+            let adjustedWeekday = (weekday + 5) % 7
+            
+            if adjustedWeekday < currentWeekDay {
+                weeks.append(currentWeek)
+                currentWeek = Array(repeating: nil, count: 7)
+            }
+            
+            currentWeek[adjustedWeekday] = contribution
+            currentWeekDay = adjustedWeekday
+        }
+        
+        if !currentWeek.allSatisfy({ $0 == nil }) {
+            weeks.append(currentWeek)
+        }
+        
+        return weeks
+    }
+    
+    func getContributionMonths(weeks: [[PracticeContribution?]]) -> [String] {
+        var months: Set<String> = []
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "MMM"
+        
+        for week in weeks {
+            for contribution in week.compactMap({ $0 }) {
+                months.insert(dateFormatter.string(from: contribution.date))
+            }
+        }
+        
+        return Array(months).sorted { month1, month2 in
+            let date1 = dateFormatter.date(from: month1) ?? Date()
+            let date2 = dateFormatter.date(from: month2) ?? Date()
+            return date1 < date2
+        }
     }
 }
 
