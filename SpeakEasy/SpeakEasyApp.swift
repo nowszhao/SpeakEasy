@@ -34,6 +34,12 @@ struct MainTabView: View {
                     Text("我的")
                 }
         }
+        .onAppear {
+            // 检查并生成每日练习题目
+            if dbManager.loadTodayPracticeItem() == nil {
+                _ = dbManager.generateDailyPracticeItem()
+            }
+        }
     }
 }
 

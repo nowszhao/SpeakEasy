@@ -387,7 +387,7 @@ class DatabaseManager: ObservableObject {
             return
         }
         
-        // 开���事务
+        // 开始事务
         sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
         
         // 1. 删除文件
@@ -774,19 +774,17 @@ class DatabaseManager: ObservableObject {
         SELECT p.*, COUNT(r.id) as recording_count
         FROM practice_items p
         LEFT JOIN recordings r ON p.id = r.practice_item_id
-        WHERE DATE(r.date) = DATE('now', 'localtime')
-        GROUP BY p.id
-        ORDER BY r.date DESC
-        LIMIT 1;
+        INNER JOIN daily_practice dp ON p.id = dp.practice_item_id
+        WHERE dp.date = DATE('now', 'localtime')
+        GROUP BY p.id;
         """
         
         var statement: OpaquePointer?
         var item: PracticeItem?
         
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            if sqlite3_step(statement) == SQLITE_ROW,
-               let stmt = statement {  // 解包 statement
-                item = extractPracticeItem(from: stmt)
+            if sqlite3_step(statement) == SQLITE_ROW {
+                item = extractPracticeItem(from: statement!)
             }
         }
         sqlite3_finalize(statement)
@@ -804,6 +802,10 @@ class DatabaseManager: ObservableObject {
             FROM recordings
             WHERE DATE(date) = DATE('now', 'localtime')
         )
+        AND p.id NOT IN (
+            SELECT DISTINCT practice_item_id
+            FROM recordings
+        )
         GROUP BY p.id
         ORDER BY RANDOM()
         LIMIT 1;
@@ -813,12 +815,39 @@ class DatabaseManager: ObservableObject {
         var item: PracticeItem?
         
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            if sqlite3_step(statement) == SQLITE_ROW,
-               let stmt = statement {  // 解包 statement
-                item = extractPracticeItem(from: stmt)
+            if sqlite3_step(statement) == SQLITE_ROW {
+                item = extractPracticeItem(from: statement!)
+            } else {
+                // 如果没有未练习的题目，则从所有题目中随机选择
+                let fallbackQuery = """
+                SELECT p.*, COUNT(r.id) as recording_count
+                FROM practice_items p
+                LEFT JOIN recordings r ON p.id = r.practice_item_id
+                WHERE p.id NOT IN (
+                    SELECT practice_item_id
+                    FROM recordings
+                    WHERE DATE(date) = DATE('now', 'localtime')
+                )
+                GROUP BY p.id
+                ORDER BY RANDOM()
+                LIMIT 1;
+                """
+                
+                var fallbackStatement: OpaquePointer?
+                if sqlite3_prepare_v2(db, fallbackQuery, -1, &fallbackStatement, nil) == SQLITE_OK {
+                    if sqlite3_step(fallbackStatement) == SQLITE_ROW {
+                        item = extractPracticeItem(from: fallbackStatement!)
+                    }
+                }
+                sqlite3_finalize(fallbackStatement)
             }
         }
         sqlite3_finalize(statement)
+        
+        if let item = item {
+            // 保存今日练习题目
+            saveDailyPracticeItem(item)
+        }
         
         return item
     }
@@ -839,10 +868,9 @@ class DatabaseManager: ObservableObject {
         var practicesByDate: [String: (Date, [PracticeItem])] = [:]
         
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            while sqlite3_step(statement) == SQLITE_ROW,
-                  let stmt = statement {
-                if let item = extractPracticeItem(from: stmt),
-                   let dateText = sqlite3_column_text(stmt, 11) {
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let item = extractPracticeItem(from: statement!),
+                   let dateText = sqlite3_column_text(statement!, 11) {
                     let dateString = String(cString: dateText)
                     
                     // 转换日期
@@ -1091,6 +1119,32 @@ class DatabaseManager: ObservableObject {
             let date2 = dateFormatter.date(from: month2) ?? Date()
             return date1 < date2
         }
+    }
+    
+    // 添加保存今日练习题目的方法
+    private func saveDailyPracticeItem(_ item: PracticeItem) {
+        let query = """
+        CREATE TABLE IF NOT EXISTS daily_practice (
+            date TEXT PRIMARY KEY,
+            practice_item_id INTEGER,
+            FOREIGN KEY(practice_item_id) REFERENCES practice_items(id)
+        );
+        """
+        executeQuery(query)
+        
+        let insertQuery = """
+        INSERT OR REPLACE INTO daily_practice (date, practice_item_id)
+        VALUES (DATE('now', 'localtime'), ?);
+        """
+        
+        var statement: OpaquePointer?
+        if sqlite3_prepare_v2(db, insertQuery, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_int(statement, 1, Int32(item.id ?? 0))
+            if sqlite3_step(statement) != SQLITE_DONE {
+                print("Error saving daily practice item")
+            }
+        }
+        sqlite3_finalize(statement)
     }
 }
 

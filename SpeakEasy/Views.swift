@@ -251,7 +251,7 @@ struct PracticeListView: View {
     }
 }
 
-// 添加 PracticeRoomView
+// 修改 PracticeRoomView
 struct PracticeRoomView: View {
     let item: PracticeItem
     @StateObject private var audioManager = AudioManager.shared
@@ -260,28 +260,40 @@ struct PracticeRoomView: View {
     @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            ArticleView(item: item)
-                .tabItem {
-                    VStack {
-                        Image(systemName: "doc.text")
-                            .font(.title2)
-                        Text("文章")
-                            .font(.headline)
-                    }
+        VStack(spacing: 0) {
+            // 自定义顶部标签栏
+            HStack(spacing: 0) {
+                TabButton(
+                    title: "文章",
+                    systemImage: "doc.text",
+                    isSelected: selectedTab == 0
+                ) {
+                    selectedTab = 0
                 }
-                .tag(0)
+                
+                TabButton(
+                    title: "练习记录",
+                    systemImage: "waveform",
+                    isSelected: selectedTab == 1
+                ) {
+                    selectedTab = 1
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
             
-            RecordingsView(recordings: dbManager.recordings)
-                .tabItem {
-                    VStack {
-                        Image(systemName: "waveform")
-                            .font(.title2)
-                        Text("历史记录")
-                            .font(.headline)
-                    }
-                }
-                .tag(1)
+            Divider()
+                .padding(.top, 8)
+            
+            // 内容区域
+            TabView(selection: $selectedTab) {
+                ArticleView(item: item)
+                    .tag(0)
+                
+                RecordingsView(recordings: dbManager.recordings)
+                    .tag(1)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
         }
         .navigationTitle(item.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -289,20 +301,37 @@ struct PracticeRoomView: View {
             if let id = item.id {
                 dbManager.loadRecordings(for: id)
             }
-            
-            // 设置标签栏的外观
-            UITabBar.appearance().backgroundColor = .systemBackground
-            let appearance = UITabBarAppearance()
-            appearance.configureWithDefaultBackground()
-            UITabBar.appearance().standardAppearance = appearance
-            UITabBar.appearance().scrollEdgeAppearance = appearance
-            
-            // 置标签字体大小
-            UITabBarItem.appearance().setTitleTextAttributes([
-                .font: UIFont.systemFont(ofSize: 16, weight: .medium)
-            ], for: .normal)
         }
         .interactiveDismissDisabled()
+    }
+}
+
+// 添加自定义标签按钮
+struct TabButton: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 16))
+                    Text(title)
+                        .font(.headline)
+                }
+                .foregroundColor(isSelected ? .blue : .gray)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                
+                // 底部指示条
+                Rectangle()
+                    .fill(isSelected ? Color.blue : Color.clear)
+                    .frame(height: 2)
+            }
+        }
     }
 }
 
