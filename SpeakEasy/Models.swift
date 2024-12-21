@@ -120,4 +120,10 @@ struct Topic: Identifiable, Codable {
         self.isPreset = isPreset
         self.practiceCount = practiceCount
     }
+}
+
+struct DailyPractices: Identifiable {
+    let id: String  // 日期字符串，格式：yyyy-MM-dd
+    let date: Date
+    let items: [PracticeItem]
 } 
