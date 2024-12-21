@@ -28,6 +28,33 @@ struct ImportTopicView: View {
                         }
                     }
                 }
+                
+                Section {
+                    DisclosureGroup("JSON模板说明") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("文件格式示例:")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            Text("""
+                            [
+                                {
+                                    "title": "xxx",
+                                    "content": "xxxx",
+                                    "mp3_url": "xxxm.m3u8"
+                                },
+                                ...
+                            ]
+                            """)
+                            .font(.system(.caption, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
             }
             .navigationTitle("导入专题")
             .navigationBarTitleDisplayMode(.inline)

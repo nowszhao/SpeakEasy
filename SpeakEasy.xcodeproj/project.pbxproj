@@ -15,9 +15,22 @@
 		7E18249D2D1677F20070A1A3 /* dedao60.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = dedao60.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		7E07769C2D16B3D1009FFB26 /* Exceptions for "SpeakEasy" folder in "SpeakEasy" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 7E1824702D16763C0070A1A3 /* SpeakEasy */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		7E1824732D16763C0070A1A3 /* SpeakEasy */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7E07769C2D16B3D1009FFB26 /* Exceptions for "SpeakEasy" folder in "SpeakEasy" target */,
+			);
 			path = SpeakEasy;
 			sourceTree = "<group>";
 		};
@@ -262,6 +275,8 @@
 				DEVELOPMENT_TEAM = VWKUKT2732;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SpeakEasy/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "慢慢说";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -293,6 +308,8 @@
 				DEVELOPMENT_TEAM = VWKUKT2732;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SpeakEasy/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "慢慢说";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

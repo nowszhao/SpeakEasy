@@ -3,7 +3,7 @@
 <img src="icons/SpeakEasyApp.png" width="350" height="350"/>
 <p>
 
-SpeakEasy 是一款口语表达练习iOS应用，通过持续不断的跟读刻意练习，让你彻底告别你说话不清楚、不准确的困扰。
+SpeakEasy（慢慢说) 是一款口语表达练习iOS应用，通过持续不断的跟读刻意练习，让你彻底告别你说话不清楚、不准确的困扰。
 
 
 [![Swift](https://img.shields.io/badge/Swift-5.0-orange.svg)](https://swift.org)
