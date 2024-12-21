@@ -11,6 +11,7 @@ struct SpeakEasyApp: App {
 
 struct MainTabView: View {
     @StateObject private var dbManager = DatabaseManager.shared
+    @AppStorage("hasGeneratedHistory") private var hasGeneratedHistory = true
     
     var body: some View {
         TabView {
@@ -39,6 +40,13 @@ struct MainTabView: View {
             if dbManager.loadTodayPracticeItem() == nil {
                 _ = dbManager.generateDailyPracticeItem()
             }
+                        
+//            dbManager.generateHistoryPractices()
+            // 只在首次启动时生成历史记录
+//            if !hasGeneratedHistory {
+//                dbManager.generateHistoryPractices()
+//                hasGeneratedHistory = true
+//            }
         }
     }
 }
@@ -53,7 +61,9 @@ struct DailyPracticeView: View {
         NavigationView {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    if let item = dailyItem {
+                    // 只在未完成今日练习时显示 dailyItem
+                    if let item = dailyItem,
+                       !hasCompletedToday(item) {
                         TimelineSection(
                             date: Date(),
                             title: "今天",
@@ -71,19 +81,25 @@ struct DailyPracticeView: View {
                     }
                     
                     ForEach(Array(practiceHistory.enumerated()), id: \.element.id) { index, daily in
-                        TimelineSection(
-                            date: daily.date,
-                            title: formatDate(daily.date),
-                            isFirst: dailyItem == nil && index == 0,
-                            isLast: index == practiceHistory.count - 1
-                        ) {
-                            ForEach(daily.items) { item in
-                                NavigationLink {
-                                    PracticeRoomView(item: item)
-                                } label: {
-                                    PracticeItemRow(item: item)
-                                        .padding(.horizontal)
-                                        .padding(.vertical, 8)
+                        // 如果是今天的记录，并且已经显示了 dailyItem，就跳过
+                        if Calendar.current.isDateInToday(daily.date) && 
+                           dailyItem != nil && !hasCompletedToday(dailyItem!) {
+                            EmptyView()
+                        } else {
+                            TimelineSection(
+                                date: daily.date,
+                                title: formatDate(daily.date),
+                                isFirst: (dailyItem == nil || hasCompletedToday(dailyItem!)) && index == 0,
+                                isLast: index == practiceHistory.count - 1
+                            ) {
+                                ForEach(daily.items) { item in
+                                    NavigationLink {
+                                        PracticeRoomView(item: item)
+                                    } label: {
+                                        PracticeItemRow(item: item)
+                                            .padding(.horizontal)
+                                            .padding(.vertical, 8)
+                                    }
                                 }
                             }
                         }
@@ -93,7 +109,6 @@ struct DailyPracticeView: View {
             }
             .navigationTitle("每日一练")
             .onAppear {
-//                dbManager.generateHistoryPractices()
                 loadDailyPractice()
                 loadPracticeHistory()
             }
@@ -119,15 +134,36 @@ struct DailyPracticeView: View {
     }
     
     private func loadDailyPractice() {
+        print("\n📅 加载每日练习...")
         if let todayItem = dbManager.loadTodayPracticeItem() {
+            print("✅ 加载到今日练习: ID=\(todayItem.id ?? -1), 标题=\(todayItem.title)")
             dailyItem = todayItem
         } else {
+            print("🆕 生成新的每日练习")
             dailyItem = dbManager.generateDailyPracticeItem()
         }
     }
     
     private func loadPracticeHistory() {
+        print("\n📚 加载练习历史...")
         practiceHistory = dbManager.loadPracticeHistory()
+        print("📊 加载到 \(practiceHistory.count) 天的练习记录")
+        
+        // 打印每天的练习详情
+        for daily in practiceHistory {
+//            print("📅 \(formatDate(daily.date)): \(daily.items.count) 个练习")
+            for item in daily.items {
+                print("  - ID=\(item.id ?? -1), 标题=\(item.title)")
+            }
+        }
+    }
+    
+    // 添加检查今日练习是否已完成的方法
+    private func hasCompletedToday(_ item: PracticeItem) -> Bool {
+        let todayPractices = practiceHistory.first { 
+            Calendar.current.isDateInToday($0.date)
+        }
+        return todayPractices?.items.contains(where: { $0.id == item.id }) ?? false
     }
 }
 
@@ -154,29 +190,34 @@ struct TimelineSection<Content: View>: View {
     }
     
     var body: some View {
-        HStack(spacing: 15) {
+        HStack(alignment: .top, spacing: 15) {
             // 时间轴部分
-            ZStack(alignment: .center) {
-                // 背景连接线
-                if !isFirst {
-                    Rectangle()
-                        .fill(Color.blue.opacity(0.2))
-                        .frame(width: 2)
-                        .offset(y: -10) // 向上延伸以确保连接
-                }
+            VStack(spacing: 0) {
+                // 为了和文字对齐，添加一个顶部间距
+                Color.clear.frame(height: 4)  // 微调此值以实现完美对齐
                 
-                VStack(spacing: 0) {
-                    // 时间点
-                    Circle()
-                        .fill(Color.blue)
-                        .frame(width: 10, height: 10)
-                    
-                    // 下半部分连接线
-                    if !isLast {
+                ZStack(alignment: .center) {
+                    // 背景连接线
+                    if !isFirst {
                         Rectangle()
                             .fill(Color.blue.opacity(0.2))
                             .frame(width: 2)
-                            .frame(maxHeight: .infinity)
+                            .offset(y: -10)
+                    }
+                    
+                    VStack(spacing: 0) {
+                        // 时间点
+                        Circle()
+                            .fill(Color.blue)
+                            .frame(width: 10, height: 10)
+                        
+                        // 下半部分连接线
+                        if !isLast {
+                            Rectangle()
+                                .fill(Color.blue.opacity(0.2))
+                                .frame(width: 2)
+                                .frame(maxHeight: .infinity)
+                        }
                     }
                 }
             }
@@ -199,6 +240,13 @@ struct TimelineSection<Content: View>: View {
     }
 }
 
+// 添加 Date 扩展
+extension Date {
+    func isInSameDay(as date: Date) -> Bool {
+        let calendar = Calendar.current
+        return calendar.isDate(self, inSameDayAs: date)
+    }
+}
 
 // 修改 ProfileView 部分
 struct ProfileView: View {
@@ -264,3 +312,4 @@ struct ProfileView: View {
         months = dbManager.getContributionMonths(weeks: contributions)
     }
 }
+

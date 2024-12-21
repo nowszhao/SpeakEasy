@@ -853,47 +853,130 @@ class DatabaseManager: ObservableObject {
     }
     
     func loadPracticeHistory() -> [DailyPractices] {
+        print("🔍 开始加载练习历史...")
+        
         let query = """
-        SELECT DISTINCT p.*, 
-               COUNT(r.id) as recording_count, 
-               MAX(r.date) as latest_date,
-               DATE(r.date) as practice_date
-        FROM practice_items p
-        INNER JOIN recordings r ON p.id = r.practice_item_id
-        GROUP BY p.id, DATE(r.date)
-        ORDER BY practice_date DESC, latest_date DESC;
+        SELECT 
+            p.id, p.title, p.content, p.is_read, p.difficulty, p.category, p.mp3_url, p.topic_id,
+            r.date as recording_date
+        FROM recordings r
+        INNER JOIN practice_items p ON r.practice_item_id = p.id
+        ORDER BY r.date DESC;
+        """
+        
+        var practicesByDate: [String: (Date, Set<Int>, [PracticeItem])] = [:]
+        var statement: OpaquePointer?
+        
+        if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
+            var recordCount = 0
+            while sqlite3_step(statement) == SQLITE_ROW {
+                if let item = extractPracticeItem(from: statement!),
+                   let recordingDateText = sqlite3_column_text(statement!, 8) {
+                    let recordingDateStr = String(cString: recordingDateText)
+//                    print("🔍 处理记录 - 原始日期: \(recordingDateStr)")
+                    
+                    // 尝试多种日期格式
+                    var recordingDate: Date?
+                    
+                    // 1. 尝试标准 ISO8601 格式
+                    let iso8601Formatter = ISO8601DateFormatter()
+                    iso8601Formatter.formatOptions = [.withInternetDateTime]
+                    
+                    // 2. 尝试带毫秒的格式
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+                    dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+                    dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+                    
+                    if let date = iso8601Formatter.date(from: recordingDateStr) {
+                        recordingDate = date
+                    } else if let date = dateFormatter.date(from: recordingDateStr) {
+                        recordingDate = date
+                    } else {
+                        // 3. 尝试移除毫秒部分后再解析
+                        let cleanDateStr = recordingDateStr.replacingOccurrences(
+                            of: "\\.[0-9]+",
+                            with: "",
+                            options: .regularExpression
+                        )
+                        recordingDate = iso8601Formatter.date(from: cleanDateStr)
+                    }
+                    
+                    guard let date = recordingDate else {
+                        print("⚠️ 无法解析日期: \(recordingDateStr)")
+                        continue
+                    }
+                    
+                    // 获取日期字符串（不包含时间）
+                    let calendar = Calendar.current
+                    let components = calendar.dateComponents([.year, .month, .day], from: date)
+                    let dateString = String(format: "%04d-%02d-%02d", 
+                                         components.year ?? 0,
+                                         components.month ?? 0,
+                                         components.day ?? 0)
+                    
+//                    print("📅 处理记录: ID=\(item.id ?? -1), 日期=\(dateString), 标题=\(item.title)")
+                    recordCount += 1
+                    
+                    if var existing = practicesByDate[dateString] {
+                        if !existing.1.contains(item.id ?? -1) {
+                            existing.1.insert(item.id ?? -1)
+                            existing.2.append(item)
+                            practicesByDate[dateString] = existing
+//                            print("➕ 添加到现有日期: \(dateString)")
+                        } else {
+                            print("⏭️ 跳过重复项: \(dateString)")
+                        }
+                    } else {
+                        practicesByDate[dateString] = (
+                            date,
+                            Set([item.id ?? -1]),
+                            [item]
+                        )
+//                        print("✨ 创建新日期: \(dateString)")
+                    }
+                }
+            }
+            print("📊 总共处理记录数: \(recordCount)")
+        }
+        sqlite3_finalize(statement)
+        
+        let result = practicesByDate.map { dateString, value in
+            DailyPractices(
+                id: dateString,
+                date: value.0,
+                items: value.2
+            )
+        }.sorted { $0.date > $1.date }
+        
+        print("🏁 加载完成，共 \(result.count) 天的练习记录")
+        return result
+    }
+    
+    // 添加获取最新录音时间的辅助方法
+    private func getLatestRecordingDate(for itemId: Int) -> Date {
+        let query = """
+        SELECT date FROM recordings
+        WHERE practice_item_id = ?
+        ORDER BY date DESC
+        LIMIT 1;
         """
         
         var statement: OpaquePointer?
-        var practicesByDate: [String: (Date, [PracticeItem])] = [:]
+        var latestDate = Date(timeIntervalSince1970: 0)
         
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
-            while sqlite3_step(statement) == SQLITE_ROW {
-                if let item = extractPracticeItem(from: statement!),
-                   let dateText = sqlite3_column_text(statement!, 11) {
-                    let dateString = String(cString: dateText)
-                    
-                    // 转换日期
-                    let dateFormatter = DateFormatter()
-                    dateFormatter.dateFormat = "yyyy-MM-dd"
-                    let date = dateFormatter.date(from: dateString) ?? Date()
-                    
-                    // 按日期分组
-                    if var existing = practicesByDate[dateString] {
-                        existing.1.append(item)
-                        practicesByDate[dateString] = existing
-                    } else {
-                        practicesByDate[dateString] = (date, [item])
-                    }
-                }
+            sqlite3_bind_int(statement, 1, Int32(itemId))
+            
+            if sqlite3_step(statement) == SQLITE_ROW,
+               let dateText = sqlite3_column_text(statement, 0) {
+                let dateFormatter = ISO8601DateFormatter()
+                latestDate = dateFormatter.date(from: String(cString: dateText)) ?? Date(timeIntervalSince1970: 0)
             }
         }
         sqlite3_finalize(statement)
         
-        // 转换为数组并排序
-        return practicesByDate.map { dateString, value in
-            DailyPractices(id: dateString, date: value.0, items: value.1)
-        }.sorted { $0.date > $1.date }
+        return latestDate
     }
     
     private func extractPracticeItem(from statement: OpaquePointer) -> PracticeItem? {
@@ -919,10 +1002,12 @@ class DatabaseManager: ObservableObject {
     }
     
     func generateHistoryPractices() {
+        print("\n🎬 开始生成历史练习记录...")
+        
         // 检查是否已经有历史记录
         let checkQuery = """
         SELECT COUNT(*) FROM recordings 
-        WHERE date >= date('now', '-7 days');
+        WHERE DATE(date, 'localtime') >= DATE('now', 'localtime', '-7 days');
         """
         
         var statement: OpaquePointer?
@@ -931,15 +1016,17 @@ class DatabaseManager: ObservableObject {
         if sqlite3_prepare_v2(db, checkQuery, -1, &statement, nil) == SQLITE_OK {
             if sqlite3_step(statement) == SQLITE_ROW {
                 hasHistory = sqlite3_column_int(statement, 0) > 0
+                print("📊 已有历史记录数: \(sqlite3_column_int(statement, 0))")
             }
         }
         sqlite3_finalize(statement)
         
-        // 如果已经有历史记录，就不再生成
         if hasHistory {
+            print("⏭️ 已存在历史记录，跳过生成")
             return
         }
         
+        print("🔄 开始生成新的历史记录...")
         // 开始事务
         sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
         
@@ -957,6 +1044,9 @@ class DatabaseManager: ObservableObject {
                     let recordingsFolder = documentsPath.appendingPathComponent("Recordings", isDirectory: true)
                     let fileURL = recordingsFolder.appendingPathComponent("\(recordingId.uuidString).m4a")
                     
+                    // 创建录音文件夹
+                    try? FileManager.default.createDirectory(at: recordingsFolder, withIntermediateDirectories: true)
+                    
                     // 创建空的录音文件
                     try? "".write(to: fileURL, atomically: true, encoding: .utf8)
                     
@@ -970,7 +1060,9 @@ class DatabaseManager: ObservableObject {
                         sqlite3_bind_text(statement, 1, (recordingId.uuidString as NSString).utf8String, -1, nil)
                         sqlite3_bind_int(statement, 2, Int32(item.id ?? 0))
                         
+                        // 使用简单的 ISO8601 格式
                         let dateFormatter = ISO8601DateFormatter()
+                        dateFormatter.formatOptions = [.withInternetDateTime]  // 只使用基本格式
                         let dateString = dateFormatter.string(from: date)
                         sqlite3_bind_text(statement, 3, (dateString as NSString).utf8String, -1, nil)
                         
@@ -981,33 +1073,34 @@ class DatabaseManager: ObservableObject {
                         if sqlite3_step(statement) != SQLITE_DONE {
                             print("Error inserting recording")
                         }
-                    }
-                    sqlite3_finalize(statement)
-                    
-                    // 随机生成评分记录
-                    let scoreQuery = """
-                    INSERT INTO speech_scores (recording_id, transcribed_text, match_score)
-                    VALUES (?, ?, ?);
-                    """
-                    
-                    if sqlite3_prepare_v2(db, scoreQuery, -1, &statement, nil) == SQLITE_OK {
-                        sqlite3_bind_text(statement, 1, (recordingId.uuidString as NSString).utf8String, -1, nil)
-                        sqlite3_bind_text(statement, 2, (item.content as NSString).utf8String, -1, nil)
+                        sqlite3_finalize(statement)
                         
-                        let score = Double.random(in: 0.6...1.0)
-                        sqlite3_bind_double(statement, 3, score)
+                        // 随机生成评分记录
+                        let scoreQuery = """
+                        INSERT INTO speech_scores (recording_id, transcribed_text, match_score)
+                        VALUES (?, ?, ?);
+                        """
                         
-                        if sqlite3_step(statement) != SQLITE_DONE {
-                            print("Error inserting score")
+                        if sqlite3_prepare_v2(db, scoreQuery, -1, &statement, nil) == SQLITE_OK {
+                            sqlite3_bind_text(statement, 1, (recordingId.uuidString as NSString).utf8String, -1, nil)
+                            sqlite3_bind_text(statement, 2, (item.content as NSString).utf8String, -1, nil)
+                            
+                            let score = Double.random(in: 0.6...1.0)
+                            sqlite3_bind_double(statement, 3, score)
+                            
+                            if sqlite3_step(statement) != SQLITE_DONE {
+                                print("Error inserting score")
+                            }
                         }
+                        sqlite3_finalize(statement)
                     }
-                    sqlite3_finalize(statement)
                 }
             }
         }
         
         // 提交事务
         sqlite3_exec(db, "COMMIT", nil, nil, nil)
+        print("✅ 生成历史练习记录完成")
     }
     
     private func generateRandomPracticeItem() -> PracticeItem? {

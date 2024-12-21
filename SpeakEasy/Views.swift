@@ -335,7 +335,8 @@ struct TabButton: View {
     }
 }
 
-// 修改 PracticeItemRow 结构体
+
+//
 struct PracticeItemRow: View {
     let item: PracticeItem
     @StateObject private var dbManager = DatabaseManager.shared
@@ -347,7 +348,11 @@ struct PracticeItemRow: View {
             HStack {
                 Text(item.title)
                     .font(.headline)
-                    .foregroundColor(practiceCount == 0 ? .red : .primary)  // 未练习显示红色
+                    .foregroundColor(practiceCount == 0 ? .red : .primary)
+                    .lineLimit(1)  // 限制为单行
+                    .truncationMode(.tail)  // 使用省略号
+                
+                Spacer(minLength: 8)  // 最小间距
                 
                 if practiceCount == 0 {
                     Text("NEW")
@@ -362,8 +367,6 @@ struct PracticeItemRow: View {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
                 }
-                
-                Spacer()
             }
             
             HStack {
@@ -374,7 +377,7 @@ struct PracticeItemRow: View {
                 } else {
                     Text("未练习")
                         .font(.caption)
-                        .foregroundColor(.red)  // 未练习状态也显示为红色
+                        .foregroundColor(.red)
                 }
                 
                 Spacer()
@@ -402,6 +405,74 @@ struct PracticeItemRow: View {
         }
     }
 }
+
+//xxxx  修改 PracticeItemRow 结构体
+//struct PracticeItemRow: View {
+//    let item: PracticeItem
+//    @StateObject private var dbManager = DatabaseManager.shared
+//    @State private var highestScore: Int = 0
+//    @State private var practiceCount: Int = 0
+//    
+//    var body: some View {
+//        VStack(alignment: .leading, spacing: 8) {
+//            HStack {
+//                Text(item.title)
+//                    .font(.headline)
+//                    .foregroundColor(practiceCount == 0 ? .red : .primary)  // 未练习显示红色
+//                
+//                if practiceCount == 0 {
+//                    Text("NEW")
+//                        .font(.caption)
+//                        .fontWeight(.bold)
+//                        .foregroundColor(.white)
+//                        .padding(.horizontal, 6)
+//                        .padding(.vertical, 2)
+//                        .background(Color.red)
+//                        .cornerRadius(4)
+//                } else {
+//                    Image(systemName: "checkmark.circle.fill")
+//                        .foregroundColor(.green)
+//                }
+//                
+//                Spacer()
+//            }
+//            
+//            HStack {
+//                if highestScore > 0 {
+//                    Text("最高分: \(highestScore)")
+//                        .font(.caption)
+//                        .foregroundColor(.green)
+//                } else {
+//                    Text("未练习")
+//                        .font(.caption)
+//                        .foregroundColor(.red)  // 未练习状态也显示为红色
+//                }
+//                
+//                Spacer()
+//                
+//                HStack(spacing: 4) {
+//                    Image(systemName: "mic.fill")
+//                    Text("\(practiceCount)次")
+//                }
+//                .font(.caption)
+//                .padding(4)
+//                .background(Color.blue.opacity(0.2))
+//                .cornerRadius(4)
+//            }
+//        }
+//        .onAppear {
+//            loadStats()
+//        }
+//    }
+//    
+//    private func loadStats() {
+//        if let id = item.id {
+//            let stats = dbManager.loadPracticeStats(for: id)
+//            self.practiceCount = stats.practiceCount
+//            self.highestScore = stats.highestScore
+//        }
+//    }
+//}
 
 // 添加 ArticleView
 struct ArticleView: View {
