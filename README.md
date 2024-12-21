@@ -1,6 +1,6 @@
 # SpeakEasy
 <p align="center">
-<img src="icons/SpeakEasyApp.png" width="128" height="128"/>
+<img src="icons/SpeakEasyApp.png" width="500" height="500"/>
 <p>
 
 SpeakEasy 是一款口语表达练习iOS应用，通过持续不断的跟读刻意练习，让你彻底告别你说话不清楚、不准确的困扰。
