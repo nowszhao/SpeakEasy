@@ -93,7 +93,7 @@ struct DailyPracticeView: View {
             }
             .navigationTitle("每日一练")
             .onAppear {
-                dbManager.generateHistoryPractices()
+//                dbManager.generateHistoryPractices()
                 loadDailyPractice()
                 loadPracticeHistory()
             }

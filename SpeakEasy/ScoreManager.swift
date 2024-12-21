@@ -6,8 +6,8 @@ class ScoreManager {
         let originalChars = preprocessText(original)
         let transcribedChars = preprocessText(transcribed)
         
-        print("原始文本(处理后): \(originalChars)")
-        print("识别文本(处理后): \(transcribedChars)")
+        // print("原始文本(处理后): \(originalChars)")
+        // print("识别文本(处理后): \(transcribedChars)")
         
         // 计算最长公共子序列
         let lcs = longestCommonSubsequence(originalChars, transcribedChars)

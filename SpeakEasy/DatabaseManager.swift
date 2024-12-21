@@ -11,7 +11,7 @@ class DatabaseManager: ObservableObject {
     @Published var currentTopicId: Int = 1  // 当前选中的专题
     
     private init() {
-        deleteOldDatabase()
+//        deleteOldDatabase()
         openDatabase()
         createTables()
         loadInitialData()
@@ -44,8 +44,8 @@ class DatabaseManager: ObservableObject {
         DROP TABLE IF EXISTS topics;
         """
         
-        executeQuery(dropTablesQuery)
-        print("已删除旧表")
+//        executeQuery(dropTablesQuery)
+//        print("已删除旧表")
         
         // 按照依赖顺序创建表
         let createTopicsTableQuery = """
