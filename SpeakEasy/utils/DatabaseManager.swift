@@ -1125,7 +1125,7 @@ class DatabaseManager: ObservableObject {
         return item
     }
     
-    func loadContributions(months: Int = 8) -> [[PracticeContribution?]] {
+    func loadContributions(months: Int = 3) -> [[PracticeContribution?]] {
         let query = """
         WITH RECURSIVE dates(date) AS (
             SELECT date('now', 'start of day', '-\(months) months')
