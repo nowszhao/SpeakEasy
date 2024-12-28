@@ -413,6 +413,7 @@ struct ArticleView: View {
     @StateObject private var audioManager = AudioManager.shared
     @StateObject private var dbManager = DatabaseManager.shared
     @StateObject private var speechRecognizer = SpeechRecognizer()
+    @StateObject private var ttsManager = TTSManager.shared
     
     var body: some View {
         VStack {
@@ -425,16 +426,40 @@ struct ArticleView: View {
                 if audioManager.isPlaying {
                     audioManager.stopPlaying()
                 } else {
-                    audioManager.playStreamingAudio(url: item.mp3Url)
+                    if !item.mp3Url.isEmpty {
+                        audioManager.playStreamingAudio(url: item.mp3Url)
+                    } else {
+                        audioManager.playContent(item.content)
+                    }
                 }
             }) {
                 HStack {
                     Image(systemName: audioManager.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.title)
-                    Text(audioManager.isPlaying ? "暂停示范" : "播放示范")
+                    Text(audioManager.isPlaying ? "暂停" : "播放")
+                    if item.mp3Url.isEmpty {
+                        Text("(系统朗读)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .foregroundColor(.blue)
                 .padding()
+            }
+            
+            // 如果是系统朗读，添加语速控制
+            if item.mp3Url.isEmpty {
+                HStack {
+                    Text("语速")
+                    Slider(
+                        value: Binding(
+                            get: { Double(ttsManager.speechRate) },
+                            set: { ttsManager.speechRate = Float($0) }
+                        ),
+                        in: 0.1...0.75
+                    )
+                }
+                .padding(.horizontal)
             }
             
             Divider()

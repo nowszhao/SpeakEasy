@@ -9,15 +9,24 @@ class AudioManager: NSObject, ObservableObject, AVAudioRecorderDelegate, AVAudio
     @Published var currentTime: TimeInterval = 0
     @Published var currentRecordingURL: URL?
     @Published var currentPlayingURL: URL?
+    @Published var isUsingTTS = false
     
     private var audioRecorder: AVAudioRecorder?
     private var audioPlayer: AVAudioPlayer?
     private var streamingPlayer: AVPlayer?
     private var timer: Timer?
+    private let ttsManager = TTSManager.shared
     
     override init() {
         super.init()
         setupAudioSession()
+        // 添加 TTS 完成通知观察者
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(ttsDidFinishSpeaking),
+            name: .TTSDidFinishSpeaking,
+            object: nil
+        )
     }
     
     private func setupAudioSession() {
@@ -131,7 +140,13 @@ class AudioManager: NSObject, ObservableObject, AVAudioRecorderDelegate, AVAudio
     }
     
     func stopPlaying() {
-        stopAllAudio()
+        if isUsingTTS {
+            ttsManager.stopSpeaking()
+            isUsingTTS = false
+        } else {
+            stopAllAudio()
+        }
+        isPlaying = false
     }
     
     private func stopAllAudio() {
@@ -197,6 +212,19 @@ class AudioManager: NSObject, ObservableObject, AVAudioRecorderDelegate, AVAudio
             print("✅ 开始播放本地音频")
         } catch {
             print("❌ 播放本地音频失败: \(error)")
+        }
+    }
+    
+    func playContent(_ content: String) {
+        isUsingTTS = true
+        ttsManager.speak(content)
+        isPlaying = true
+    }
+    
+    @objc private func ttsDidFinishSpeaking() {
+        DispatchQueue.main.async {
+            self.isPlaying = false
+            self.isUsingTTS = false
         }
     }
     
