@@ -218,9 +218,9 @@ struct PracticeContribution: Identifiable {
     
     var intensity: Int {
         if count == 0 { return 0 }
-        if score < 60 { return 1 }
-        if score < 75 { return 2 }
-        if score < 85 { return 3 }
+        if score < 70 { return 1 }
+        if score < 90 { return 2 }
+        if score < 95 { return 3 }
         return 4
     }
 }
