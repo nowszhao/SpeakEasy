@@ -428,7 +428,14 @@ struct ArticleView: View {
                     audioManager.stopPlaying()
                 } else {
                     if !item.mp3Url.isEmpty {
-                        audioManager.playStreamingAudio(url: item.mp3Url)
+                        // 处理变量替换
+                        let playUrl = item.mp3Url.replacingOccurrences(
+                            of: ".content",
+                            with: item.content.addingPercentEncoding(
+                                withAllowedCharacters: .urlQueryAllowed
+                            ) ?? ""
+                        )
+                        audioManager.playStreamingAudio(url: playUrl)
                     } else {
                         audioManager.playContent(item.content)
                     }
